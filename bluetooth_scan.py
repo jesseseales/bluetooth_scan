@@ -1,0 +1,1 @@
+/home/pi/bluetooth_scan.py
