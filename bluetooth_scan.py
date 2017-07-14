@@ -128,7 +128,6 @@ if __name__ == "__main__":
             
             if i%60==0: # update graph every 60 seconds
                 fig,ax = plt.subplots()
-                print("plotting:",[x[1] for x in time_density])
                 ax.plot([x[0] for x in time_density], [x[1] for x in time_density], '-b')
                 plt.xticks(rotation=90)
                 ax.set_ylabel("# of bluetooth devices")
