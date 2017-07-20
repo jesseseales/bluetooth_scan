@@ -52,7 +52,7 @@ class Bluetoothctl:
                 bt_id = match.group(0) # parse the regex match
                 if bt_id not in self.ignore_list: # filter out ignore_list IDs
                     device_list.append(bt_id)
-                #print("New device found")
+                    print("New device found:", bt_id)
         return device_list
     
     def exit(self):
@@ -90,7 +90,6 @@ if __name__ == "__main__":
             devices += bt.refreshDevices()
             time.sleep(1)
             i+=1
-        print("new devices:", devices)
         
         # time is currently being unused bc of the difficulty to display on graph
         t = datetime.datetime.now()
@@ -102,7 +101,7 @@ if __name__ == "__main__":
         # print devices found, save to graph
         print(device_count)
         plt.plot(device_count)
-        plt.ylabel("# of bluetooth devices")
+        plt.ylabel("# of new bluetooth devices")
         plt.xlabel("minutes since starting")
         print("saving to graph")
         plt.savefig("plot" + str(i) + ".jpg", bbox_inches = 'tight')
