@@ -27,41 +27,32 @@ class Bluetoothctl:
         else:
             print("Error starting scan...exiting")
             sys.exit(2)
-        
-    # execute "devices" to retrieve current device list
-    def refreshDevices(self, device_list):
-        self.child.send("devices\n")
+    
+    def refreshDevices(self):
+        device_list = []
+        self.child.send(" \n")
         index = self.child.expect(["bluetooth", pexpect.EOF])
         if index == 0:
-            #print("before:", self.child.before)
             output_str = self.child.before.decode("utf-8")
             device_list = self.parseDeviceOutput(output_str, device_list)
         else:
             print("Could not refresh devices...exiting")
             sys.exit(2)
-
         return device_list
         
     def parseDeviceOutput(self, output_str, device_list):
-        bt_devices = output_str.split("Device ")
-
+        bt_devices = output_str.split("\n")
         msg = ""
         for device in bt_devices:
-            # ignore scan update message - i.e. [DEL], [NEW], or [CHG]
-            # because device list will always be updated
-            update = re.match(".+((CHG)|(NEW)|(DEL)|(RSSI)).+", device)
-            match = re.match("..:..:..:..:..:..", device) 
-            if match != None and update == None: # exclude update messages
-                msg = "device"
+            # only pay attention to mesages with NEW in them
+            update = re.search(".*NEW.*Device .*..:..:..:..:..:..", device) # only detect new devices
+            match = re.search("..:..:..:..:..:..", device) 
+            #if match != None and update != None: # exclude update messages
+            if update != None and match != None:
                 bt_id = match.group(0) # parse the regex match
                 if bt_id not in self.ignore_list: # filter out ignore_list IDs
-                    device_list.add(bt_id)
-            else:
-                msg = "update"
-        #print number of changes / devices
-        if (len(bt_devices)-1 != 1):
-            msg = msg + "s"
-            print(len(bt_devices)-1, msg)
+                    device_list.append(bt_id)
+                #print("New device found")
         return device_list
     
     def exit(self):
@@ -70,67 +61,50 @@ class Bluetoothctl:
         self.child.send("exit\n")
         
     def usage(self):
-        print(" bluetooth_scan scans for 60 seconds and plots available bluetooth devices to a graph\n",
-              "Optional flags:\n",
-              "-t --timeout [seconds]\tscan for t seconds\n",
-              "-h --help\t\tshows this message\n")
+        print(" bluetooth_scan scans indefinitely and plots new bluetooth devices to a graph every 60 seconds")
     
 if __name__ == "__main__":
     bt = Bluetoothctl()
-    t = -1
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"ht:",["help","timeout"])
+        opts, args = getopt.getopt(sys.argv[1:],"ht:",["help"])
     except getopt.GetoptError as err:
         print(err)
         bt.usage()
         sys.exit(2)
     if opts:
-        for o,a in opts:
+        for o in opts:
             if o in ("-h","--help"):
                 bt.usage()
                 sys.exit(0)
-            elif o in ("-t", "--timeout"):
-                t = int(a)
-                if t < 0:
-                    print("t must be a non-negative integer")
-                    sys.exit(0)
-                else:
-                    t = int(a)
             
     print("Launching bluetooth")
     bt.scan()
-    devices = set()
-    time_density = []
-    if t > 0:
-        # using a timeout
-        for i in range(0,t):
-            devices = bt.refreshDevices(devices)
-            t = datetime.datetime.now()
-            time_density.append( [t,len(devices)] )
-            i+=1
+              
+    devices = []
+    time_list = []
+    device_count = []
+    i = 0
+    while(True):
+        #scan for 60 seconds
+        for j in range(60):
+            devices += bt.refreshDevices()
             time.sleep(1)
-            
-        fig,ax = plt.subplots()
-        ax.plot([x[1] for x in time_density], '-b')
-        ax.set_xticklabels([x[0] for x in time_density])
-        plt.xticks(rotation=90)
-        plt.savefig("plot.png", bbox_inches = 'tight')
+            i+=1
+        print("new devices:", devices)
         
-    else:
-        # continually check for non-pi bluetooth devices and log count
-        i = 0
-        while(True):
-            devices = bt.refreshDevices(devices)
-            t = datetime.datetime.now()
-            time_density.append( [t,len(devices)] )
-            time.sleep(1)
-            i+=1
-            
-            if i%60==0: # update graph every 60 seconds
-                fig,ax = plt.subplots()
-                ax.plot([x[0] for x in time_density], [x[1] for x in time_density], '-b')
-                plt.xticks(rotation=90)
-                ax.set_ylabel("# of bluetooth devices")
-                plt.savefig("plot.png", bbox_inches = 'tight')
-                
-        bt.exit()
+        # time is currently being unused bc of the difficulty to display on graph
+        t = datetime.datetime.now()
+        time_list.append(t.minute)
+        
+        device_count.append(len(devices))
+        del devices[:] # clear list of devices
+        
+        # print devices found, save to graph
+        print(device_count)
+        plt.plot(device_count)
+        plt.ylabel("# of bluetooth devices")
+        plt.xlabel("minutes since starting")
+        print("saving to graph")
+        plt.savefig("plot" + str(i) + ".jpg", bbox_inches = 'tight')
+        
+    bt.exit()
