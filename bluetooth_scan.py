@@ -1,16 +1,14 @@
 #! /usr/bin/python
 
-import sys, getopt, re, pexpect, time, subprocess, datetime
+import sys, getopt, re, pexpect, time, datetime, pexpect
 import numpy as np
 from matplotlib import pyplot as plt
-from pexpect import * # pip install pexpect
 
 class Bluetoothctl:
     
-    ignore_list = [] # insert bluetooth IDs of other pis here
+    ignore_list = set() # insert bluetooth IDs of other pis here
     
     def __init__(self):
-        out = subprocess.check_output("sudo rfkill unblock bluetooth", shell = True)
         self.child = pexpect.spawn("bluetoothctl")
         bt_index = self.child.expect(["bluetooth", pexpect.EOF])
         if bt_index != 0:
@@ -30,7 +28,7 @@ class Bluetoothctl:
     
     def refreshDevices(self):
         device_list = []
-        self.child.send(" \n")
+        self.child.send("devices\n")
         index = self.child.expect(["bluetooth", pexpect.EOF])
         if index == 0:
             output_str = self.child.before.decode("utf-8")
@@ -45,15 +43,28 @@ class Bluetoothctl:
         msg = ""
         for device in bt_devices:
             # only pay attention to mesages with NEW in them
-            update = re.search(".*NEW.*Device .*..:..:..:..:..:..", device) # only detect new devices
+            update = re.search(".*((DEL)|(CHG)|(NEW)).*Device .*..:..:..:..:..:..", device) # only detect new devices
             match = re.search("..:..:..:..:..:..", device) 
             #if match != None and update != None: # exclude update messages
-            if update != None and match != None:
+            if update == None and match != None:
                 bt_id = match.group(0) # parse the regex match
                 if bt_id not in self.ignore_list: # filter out ignore_list IDs
                     device_list.append(bt_id)
-                    print("New device found:", bt_id)
         return device_list
+    
+    # attempt to remove a device from the devices list
+    # if the device is still active, this will not stop it from being re-added
+    # otherwise, this will avoid counting it repeatedly
+    def removeDevice(self, device_id):
+        self.child.send("remove " + device_id + "\n")
+        try:
+            index = self.child.expect(["Device has been removed", "not available"])
+            if index == 0:
+                print("removing device " + device_id + ". If it is still active, it will reappear")
+            else:
+                print("Could not remove device", device_id)
+        except TIMEOUT:
+            print("Timeout while trying to remove device:", device_id)
     
     def exit(self):
         self.child.send("scan off\n")
@@ -66,7 +77,7 @@ class Bluetoothctl:
 if __name__ == "__main__":
     bt = Bluetoothctl()
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"ht:",["help"])
+        opts, args = getopt.getopt(sys.argv[1:],"h",["help"])
     except getopt.GetoptError as err:
         print(err)
         bt.usage()
@@ -79,31 +90,39 @@ if __name__ == "__main__":
             
     print("Launching bluetooth")
     bt.scan()
-              
-    devices = []
-    time_list = []
+    
+    static_time = datetime.timedelta(minutes=30) # threshold for considering a device as being static
+    time_diff = datetime.timedelta(minutes=5) # threshold for keeping a device on the device list
+    devices = {}
     device_count = []
     i = 0
+    
     while(True):
-        #scan for 60 seconds
-        for j in range(60):
-            devices += bt.refreshDevices()
-            time.sleep(1)
-            i+=1
         
-        # time is currently being unused bc of the difficulty to display on graph
-        t = datetime.datetime.now()
-        time_list.append(t.minute)
-        
+        updated_list = bt.refreshDevices()
+        for id in updated_list:
+            if id not in devices:
+                devices[id] = datetime.datetime.now()
+            elif datetime.datetime.now() - devices[id] > static_time:
+                # consider as a static device
+                print("Removing static device:", id)
+                del devices[id]
+                bt.ignore_list.add(id)
+            elif datetime.datetime.now() - devices[id] > time_diff:
+                # execute command to remove the device
+                # if the device is still within reach, it will reconnect
+                bt.removeDevice(id)
+                
         device_count.append(len(devices))
-        del devices[:] # clear list of devices
+        if i%60==0:
+            # print devices found, save to graph
+            plt.plot(device_count)
+            plt.ylabel("# of new bluetooth devices")
+            plt.xlabel("seconds since starting")
+            print("saving to graph")
+            plt.savefig("plot" + str(i) + ".jpg", bbox_inches = 'tight')
         
-        # print devices found, save to graph
-        print(device_count)
-        plt.plot(device_count)
-        plt.ylabel("# of new bluetooth devices")
-        plt.xlabel("minutes since starting")
-        print("saving to graph")
-        plt.savefig("plot" + str(i) + ".jpg", bbox_inches = 'tight')
+        time.sleep(1)
+        i+=1
         
     bt.exit()
