@@ -58,13 +58,15 @@ class Bluetoothctl:
     def removeDevice(self, device_id):
         self.child.send("remove " + device_id + "\n")
         try:
-            index = self.child.expect(["Device has been removed", "not available"])
+            index = self.child.expect(["Device has been removed", "not available"], timeout=100)
             if index == 0:
                 print("removing device " + device_id + ". If it is still active, it will reappear")
-            else:
-                print("Could not remove device", device_id)
+            elif index == 1:
+                print("device " + device_id + " not available to remove")
+            elif index == 2:
+                print("Timeout while removing device:", device_id)
         except TIMEOUT:
-            print("Timeout while trying to remove device:", device_id)
+            print("Timeout exception rasied for device_id:", device_id)
     
     def exit(self):
         self.child.send("scan off\n")
@@ -91,8 +93,8 @@ if __name__ == "__main__":
     print("Launching bluetooth")
     bt.scan()
     
-    static_time = datetime.timedelta(minutes=30) # threshold for considering a device as being static
-    time_diff = datetime.timedelta(minutes=5) # threshold for keeping a device on the device list
+    static_time = datetime.timedelta(minutes=5) # threshold for considering a device as being static
+    time_diff = datetime.timedelta(minutes=2) # threshold for keeping a device on the device list
     devices = {}
     device_count = []
     i = 0
