@@ -3,6 +3,7 @@
 import sys, getopt, re, pexpect, time, datetime, pexpect
 import numpy as np
 from matplotlib import pyplot as plt
+from pymongo import MongoClient
 
 class Bluetoothctl:
     
@@ -93,6 +94,15 @@ if __name__ == "__main__":
     print("Launching bluetooth")
     bt.scan()
     
+    # database setup
+    password = input("Enter database password for user 'pi': ")
+    URIstr = "mongodb://pi:" + password + "@rpibluetooth-shard-00-00-dkm17.mongodb.net:27017,rpibluetooth-shard-00-01-dkm17.mongodb.net:27017,rpibluetooth-shard-00-02-dkm17.mongodb.net:27017/rpibluetooth?ssl=true&replicaSet=rpibluetooth-shard-0&authSource=admin"
+    client = MongoClient(URIstr)
+    db = client.database
+    startTime = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y") # use this to identify this session of the bluetooth scanning
+    collection = db[startTime] # create new collection for this bluetooth scan session
+    print("Connected to database")
+    
     static_time = datetime.timedelta(minutes=5) # threshold for considering a device as being static
     time_diff = datetime.timedelta(minutes=2) # threshold for keeping a device on the device list
     devices = {}
@@ -116,15 +126,21 @@ if __name__ == "__main__":
                 bt.removeDevice(id)
                 
         device_count.append(len(devices))
-        if i%60==0:
+        if i%60==0 and i>0:
             # print devices found, save to graph
             plt.plot(device_count)
             plt.ylabel("# of new bluetooth devices")
             plt.xlabel("seconds since starting")
             print("saving to graph")
-            plt.savefig("plot" + str(i) + ".jpg", bbox_inches = 'tight')
+            plt.savefig("plot.jpg", bbox_inches = 'tight')
+            
+            # also post data to database
+            result = collection.insert_many({str(i) : device_count[x]} for x in range(i-60, i)) # insert the new 60 data points of data
+            print("query to show data stored in database:", collection.find_one())
         
         time.sleep(1)
         i+=1
+        
+        
         
     bt.exit()
