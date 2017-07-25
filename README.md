@@ -4,7 +4,7 @@
 - Raspberry Pi with Python 3.
 - Pexpect python module, numpy, matplotlib.
 - Bluetooth is on and no other bluetoothctl session is running 
-- Note: it might be necessesary to run `apt-get install libffi-dev` and `pip3 install cairocffi`
+- Note: it might be necessesary to run `apt-get install libffi-dev` then `pip3 install cairocffi`
 
 ## Usage
 This program is intended to be run on a Raspberry Pi and runs indefinitely, creating plots of discoverable bluetooth devices by executing "bluetoothctl" commands.
